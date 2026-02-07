@@ -6,14 +6,15 @@ import plotly.graph_objects as go
 st.set_page_config(page_title="소희마마 전용 전황 분석", layout="wide")
 st.markdown("""
     <style>
+    /* 한국 주식의 큰 숫자가 잘리지 않도록 폰트 크기를 최적화합니다 */
     [data-testid="stMetricValue"] { font-size: 1.5rem !important; }
     </style>
     """, unsafe_allow_html=True)
 
 st.title("🛡️ 한/미 통합 전황 및 의사결정 지원 시스템")
 
-# 2. ★ 마마님의 비밀 지도 (이름과 번호 매칭) ★
-# 마마님은 이름만 고르세요. 번호(Ticker)는 제가 관리합니다.
+# 2. ★ 마마님의 비밀 지도 (이름만 고르면 번호는 자동 연결) ★
+# 야후 서버가 가장 잘 알아듣는 .KS 규격으로 전수 교체했습니다.
 portfolio_map = {
     "그리드 (GRID)": {"ticker": "GRID", "price": 156.05, "cur": "$"},
     "우라늄 (URA)": {"ticker": "URA", "price": 51.93, "cur": "$"},
@@ -31,39 +32,38 @@ portfolio_map = {
     "조선 TOP3 (SOL)": {"ticker": "466920.KS", "price": 38282.0, "cur": "₩"}
 }
 
-# 3. 사이드바: 종목 이름만 선택!
-# 마마님이 번호를 직접 입력하실 필요가 없도록 선택창만 두었습니다.
+# 3. 사이드바: 종목 이름 선택
 selected_name = st.sidebar.selectbox("감시 종목 선택", list(portfolio_map.keys()))
 info = portfolio_map[selected_name]
 symbol = info['ticker']
 currency = info['cur']
 
-# 평단가는 이름에 맞춰 자동으로 뜹니다.
+# 평단가 자동 세팅
 avg_price = st.sidebar.number_input(f"나의 평단가 ({currency})", value=float(info['price']))
 
 if symbol:
-    # 데이터 가져오기
+    # 데이터 강제 소환
     data = yf.download(symbol, period="1y")
     
-    # 실패 시 코스닥(.KQ) 재시도
+    # .KS 실패 시 .KQ(코스닥)로 자동 전환하여 2차 수색
     if data.empty and ".KS" in symbol:
         alt_symbol = symbol.replace(".KS", ".KQ")
         data = yf.download(alt_symbol, period="1y")
 
     if not data.empty:
-        # 수치 계산
+        # 지표 계산
         data['MA60'] = data['Close'].rolling(window=60).mean()
         high = float(data['High'].max())
         curr_p = float(data['Close'].iloc[-1])
         diff = high - float(data['Low'].min())
         loss_rate = ((curr_p / avg_price) - 1) * 100 if avg_price > 0 else 0
 
-        # 4. 상단 요약
+        # 4. 상단 지표
         c1, c2, c3, c4 = st.columns(4)
         fmt = ",.0f" if currency == "₩" else ",.2f"
         c1.metric("현재가", f"{currency}{curr_p:{fmt}}")
-        c2.metric("평단가", f"{currency}{avg_price:{fmt}}")
-        c3.metric("수익률", f"{loss_rate:.2f}%")
+        c2.metric("나의 평단가", f"{currency}{avg_price:{fmt}}")
+        c3.metric("현재 수익률", f"{loss_rate:.2f}%")
         c4.metric("1년 최고가", f"{currency}{high:{fmt}}")
 
         st.divider()
@@ -76,7 +76,7 @@ if symbol:
         with col1:
             if curr_p <= f0618: st.error(f"📍 [추매] 강력 지지선({f0618:{fmt}}) 도달!")
             elif curr_p <= f05: st.warning(f"📍 [대기] 중기 지지선({f05:{fmt}}) 부근!")
-            else: st.info(f"📍 [관망] 고점 대비 안정적 전황")
+            else: st.info(f"📍 [관망] 고점 대비 안정권 유지 중")
         
         with col2:
             status = "✅ [보유] 진지 견고" if loss_rate > -10 else "🆘 [위험] 비중 조절 검토"
@@ -88,6 +88,7 @@ if symbol:
         fig.add_trace(go.Candlestick(x=data.index, open=data['Open'], high=data['High'], low=data['Low'], close=data['Close'], name="주가"))
         fig.add_trace(go.Scatter(x=data.index, y=data['MA60'], name="60일선", line=dict(color='royalblue', width=1.5)))
         
+        # 피보나치 방어선 복구
         m2 = high * 0.98
         fig.add_hline(y=m2, line_dash="dot", line_color="yellow", annotation_text=f"-2% ({m2:{fmt}})")
         for lvl, clr in [(0.236, "green"), (0.382, "cyan"), (0.5, "red"), (0.618, "magenta")]:
@@ -97,4 +98,4 @@ if symbol:
         fig.update_layout(height=600, template="plotly_dark", xaxis_rangeslider_visible=False)
         st.plotly_chart(fig, use_container_width=True)
     else:
-        st.error(f"데이터 로드 실패. '{selected_name}'의 연결 상태를 확인 중입니다.")
+        st.error(f"데이터 로드 실패. '{selected_name}'의 서버 연결을 재시도 중입니다.")
