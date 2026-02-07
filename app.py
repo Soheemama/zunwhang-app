@@ -3,14 +3,13 @@ import yfinance as yf
 import plotly.graph_objects as go
 import pandas as pd
 
-# 1. 페이지 설정 및 숫자 가독성 스타일
+# 1. 페이지 설정 및 숫자 가독성 최적화
 st.set_page_config(page_title="소희마마 전용 전황 분석", layout="wide")
 st.markdown("<style>[data-testid='stMetricValue'] { font-size: 1.5rem !important; }</style>", unsafe_allow_html=True)
 
 st.title("🛡️ 한/미 통합 전황 및 의사결정 지원 시스템")
 
-# 2. ★ 마마님의 비밀 지도 ★
-# 현대차그룹(415480)을 포함한 모든 종목의 티커를 야후 최신 규격으로 정렬했습니다.
+# 2. ★ 마마님의 비밀 지도 (데이터 소환 경로 최적화) ★
 portfolio_map = {
     "현대차그룹플러스 (TIGER)": {"y": "415480.KS", "price": 55794.0, "cur": "₩"},
     "K-반도체 (HANARO)": {"y": "445380.KS", "price": 20232.0, "cur": "₩"},
@@ -33,35 +32,34 @@ info = portfolio_map[selected_name]
 currency = info['cur']
 avg_price = st.sidebar.number_input(f"나의 평단가 ({currency})", value=float(info['price']))
 
-# ★ 3중 강제 수색 시스템 ★
-@st.cache_data(ttl=300)
-def load_data_final(y_ticker):
-    # 1. 정규 규격 시도
+# ★ 3중 공격적 데이터 소환 시스템 ★
+@st.cache_data(ttl=60) # 차단 방지를 위해 캐시 시간을 줄였습니다.
+def load_data_robust(y_ticker):
+    # 경로 1: 정규 야후 서버
     df = yf.download(y_ticker, period="1y", interval="1d", progress=False)
-    if not df.empty: return df, "야후 본대"
+    if not df.empty and len(df) > 10: return df, "경로 A"
     
-    # 2. 시장 규격 교차 시도 (.KS <-> .KQ)
+    # 경로 2: 대체 시장 규격 (.KS <-> .KQ 교차)
     alt = y_ticker.replace(".KS", ".KQ") if ".KS" in y_ticker else y_ticker.replace(".KQ", ".KS")
     df = yf.download(alt, period="1y", interval="1d", progress=False)
-    if not df.empty: return df, "시장 우회"
+    if not df.empty: return df, "경로 B"
     
-    # 3. 번호만으로 시도
+    # 경로 3: 순수 번호 규격
     clean = y_ticker.split(".")[0]
     df = yf.download(clean, period="1y", interval="1d", progress=False)
-    if not df.empty: return df, "번호 직송"
+    if not df.empty: return df, "경로 C"
     
     return None, None
 
-data, source = load_data_final(info['y'])
+data, source = load_data_robust(info['y'])
 
 if data is not None and not data.empty:
-    # 지표 계산
     data['MA60'] = data['Close'].rolling(window=60).mean()
     high, curr_p = float(data['High'].max()), float(data['Close'].iloc[-1])
     diff = high - float(data['Low'].min())
     loss_rate = ((curr_p / avg_price) - 1) * 100 if avg_price > 0 else 0
 
-    # 4. 상단 요약 (최고가 복구)
+    # 4. 상단 지표
     c1, c2, c3, c4 = st.columns(4)
     fmt = ",.0f" if currency == "₩" else ",.2f"
     c1.metric("현재가", f"{currency}{curr_p:{fmt}}")
@@ -71,8 +69,8 @@ if data is not None and not data.empty:
 
     st.divider()
 
-    # 5. 전략 지시서 및 차트
-    st.subheader(f"🚩 {selected_name} 전황 보고 (보급로: {source})")
+    # 5. 전략 지시서
+    st.subheader(f"🚩 {selected_name} 전황 분석 (보급로: {source})")
     f05, f0618 = high - (0.5 * diff), high - (0.618 * diff)
     
     col1, col2 = st.columns(2)
@@ -97,4 +95,4 @@ if data is not None and not data.empty:
     fig.update_layout(height=600, template="plotly_dark", xaxis_rangeslider_visible=False)
     st.plotly_chart(fig, use_container_width=True)
 else:
-    st.error(f"⚠️ {selected_name} 보급로 재탐색 중. 잠시 후 [새로고침(F5)] 해주세요.")
+    st.error(f"⚠️ 야후 서버의 일시적 거부입니다. 1분만 기다렸다가 새로고침(F5) 해주세요.")
