@@ -4,13 +4,13 @@ import plotly.graph_objects as go
 import pandas as pd
 import requests
 
-# 1. 페이지 설정 및 숫자 가독성 최적화
+# 1. 페이지 설정 및 숫자 가독성 스타일
 st.set_page_config(page_title="소희마마 전용 전황 분석", layout="wide")
 st.markdown("<style>[data-testid='stMetricValue'] { font-size: 1.5rem !important; }</style>", unsafe_allow_html=True)
 
 st.title("🛡️ 한/미 통합 전황 및 의사결정 지원 시스템")
 
-# 2. ★ 시장 소속 정밀 교정 명부 ★
+# 2. ★ 마마님의 비밀 지도 (시장 소속 정밀 교정) ★
 portfolio_map = {
     "현대차그룹플러스 (TIGER)": {"n": "415480", "y": "415480.KS", "price": 55794.0, "cur": "₩"},
     "K-반도체 (HANARO)": {"n": "445380", "y": "445380.KS", "price": 20232.0, "cur": "₩"},
@@ -33,36 +33,37 @@ info = portfolio_map[selected_name]
 currency = info['cur']
 avg_price = st.sidebar.number_input(f"나의 평단가 ({currency})", value=float(info['price']))
 
-# ★ 네이버 보급로 정밀 엔진 ★
-@st.cache_data(ttl=60)
-def load_data_complete(item):
+# ★ [긴급] 24시간 철통 저장 시스템 (ttl=86400) ★
+@st.cache_data(ttl=86400)
+def load_data_final_save(item):
+    # 한국 종목: 네이버 직송 보급로
     if item['cur'] == "₩":
         try:
             url = f"https://fchart.naver.com/sise.nhn?symbol={item['n']}&timeframe=day&count=400&requestType=0"
-            r = requests.get(url, timeout=5)
+            r = requests.get(url, timeout=10)
             data = []
             for line in r.text.strip().split('\n'):
                 if '<item data=' in line:
                     v = line.split('"')[1].split('|')
-                    # 배열 순서 정밀 교정: 날짜, 시가, 고가, 저가, 종가
                     data.append([v[0], float(v[1]), float(v[2]), float(v[3]), float(v[4])])
             df = pd.DataFrame(data, columns=['Date', 'Open', 'High', 'Low', 'Close'])
             df['Date'] = pd.to_datetime(df['Date'])
             df.set_index('Date', inplace=True)
-            if not df.empty: return df, "네이버 보급"
+            if not df.empty: return df, "네이버(철통저장)"
         except: pass
-    
-    # 미국 주식 또는 네이버 실패 시 야후 보급
+
+    # 미국 종목 또는 네이버 실패 시: 야후 우회 보급로
     try:
         df = yf.download(item['y'], period="2y", interval="1d", progress=False)
-        if not df.empty: return df, "야후 보급"
+        if not df.empty: return df, "야후(우회보강)"
     except: pass
+    
     return None, None
 
-data, source = load_data_complete(info)
+data, source = load_data_final_save(info)
 
 if data is not None and not data.empty:
-    # 60일선 & 120일선 복구
+    # 60일선 & 120일선 전개
     data['MA60'] = data['Close'].rolling(window=60).mean()
     data['MA120'] = data['Close'].rolling(window=120).mean()
     
@@ -79,7 +80,7 @@ if data is not None and not data.empty:
     c4.metric("1년 최고가", f"{currency}{high:{fmt}}")
 
     st.divider()
-    st.subheader(f"🚩 {selected_name} 전황 분석 (출처: {source})")
+    st.subheader(f"🚩 {selected_name} 전황 보고 (보급로: {source})")
     
     f05, f0618 = high - (0.5 * diff), high - (0.618 * diff)
     col1, col2 = st.columns(2)
@@ -92,7 +93,7 @@ if data is not None and not data.empty:
         status = "✅ [보유] 진지 견고" if loss_rate > -10 else "🆘 [위험] 비중 조절 검토"
         st.write(f"**현재 상태:** {status}")
 
-    # 차트 생성 (60일선 & 120일선)
+    # 5. 차트 (60/120일선 탑재)
     fig = go.Figure(data=[go.Candlestick(x=data.index, open=data['Open'], high=data['High'], low=data['Low'], close=data['Close'], name="주가")])
     fig.add_trace(go.Scatter(x=data.index, y=data['MA60'], name="60일선", line=dict(color='royalblue', width=1.2)))
     fig.add_trace(go.Scatter(x=data.index, y=data['MA120'], name="120일선", line=dict(color='orange', width=1.5)))
@@ -104,4 +105,4 @@ if data is not None and not data.empty:
     fig.update_layout(height=600, template="plotly_dark", xaxis_rangeslider_visible=False)
     st.plotly_chart(fig, use_container_width=True)
 else:
-    st.error(f"⚠️ {selected_name} 보급로 전면 차단. 새로고침(F5) 해주세요.")
+    st.error(f"⚠️ {selected_name} 보급로 재탐색 중. 잠시 후 새로고침(F5) 해주세요.")
