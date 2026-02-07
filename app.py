@@ -6,7 +6,7 @@ import plotly.graph_objects as go
 st.set_page_config(page_title="소희마마 전용 전황 분석", layout="wide")
 st.markdown("""
     <style>
-    /* 숫자 크기를 최적화하여 원화 단위가 잘리지 않게 합니다 */
+    /* 숫자 크기를 살짝 줄여서 잘림 현상을 방지합니다 */
     [data-testid="stMetricValue"] { font-size: 1.6rem !important; }
     </style>
     """, unsafe_allow_html=True)
@@ -47,9 +47,11 @@ default_price = my_portfolio[symbol]['price']
 avg_price = st.sidebar.number_input(f"[{symbol}] 나의 평단가 ({currency})", value=float(default_price))
 
 if symbol:
+    # 한국 주식은 종목 코드 뒤에 .KS를 붙여야 데이터가 나옵니다
     search_symbol = f"{symbol}.KS" if symbol.isdigit() and len(symbol) == 6 else symbol
     data = yf.download(search_symbol, period="1y")
     
+    # 코스피(.KS)에서 실패하면 코스닥(.KQ)으로 재시도
     if data.empty and symbol.isdigit():
         data = yf.download(f"{symbol}.KQ", period="1y")
 
@@ -84,21 +86,4 @@ if symbol:
         
         with col2:
             if avg_price > 0:
-                if loss_rate > -10: st.success("✅ [보유] 진지 견고")
-                else: st.error("🆘 [위험] 비중 축소 검토")
-
-        # 6. 차트 생성
-        fig = go.Figure()
-        fig.add_trace(go.Candlestick(x=data.index, open=data['Open'], high=data['High'], low=data['Low'], close=data['Close'], name="주가"))
-        fig.add_trace(go.Scatter(x=data.index, y=data['MA60'], name="60일선", line=dict(color='royalblue', width=1.5)))
-        fig.add_trace(go.Scatter(x=data.index, y=data['MA120'], name="120일선", line=dict(color='orange', width=1.5)))
-
-        # 피보나치 5중 전선 복구
-        m2 = high * 0.98
-        fig.add_hline(y=m2, line_dash="dot", line_color="yellow", annotation_text=f"-2% ({m2:{fmt}})")
-        for lvl, clr in [(0.236, "green"), (0.382, "cyan"), (0.5, "red"), (0.618, "magenta")]:
-            val = high - (lvl * diff)
-            fig.add_hline(y=val, line_dash="dash", line_color=clr, annotation_text=f"Fibo {lvl} ({val:{fmt}})")
-
-        fig.update_layout(height=700, template="plotly_dark", xaxis_rangeslider_visible=False)
-        st.plotly_chart(fig, use_container_width=True)
+                if loss_rate > -10: st.success("✅ [보유] 진지 견
