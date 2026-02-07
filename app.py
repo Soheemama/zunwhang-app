@@ -3,77 +3,74 @@ import yfinance as yf
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
-st.set_page_config(page_title="전황 분석 시스템", layout="wide")
+st.set_page_config(page_title="완성형 전황 분석", layout="wide")
 st.title("🛡️ 주식 전황 및 거래량 분석 시스템")
 
-# 종목 코드 입력
 symbol = st.sidebar.text_input("종목 코드 입력 (예: GOOGL)", "GOOGL").upper()
 
 if symbol:
-    # 데이터 가져오기 (에러 방지를 위해 1년치로 고정)
     data = yf.download(symbol, period="1y")
     
     if not data.empty:
-        # 주요 수치 계산
+        # 1. 지표 계산 (이평선 & 피보나치)
+        data['MA60'] = data['Close'].rolling(window=60).mean()
+        data['MA120'] = data['Close'].rolling(window=120).mean()
+        
         high_price = float(data['High'].max())
         low_price = float(data['Low'].min())
         current_price = float(data['Close'].iloc[-1])
         
-        # 지지선 계산
         minus_2 = high_price * 0.98
         fibo_05 = high_price - (0.5 * (high_price - low_price))
         fibo_0618 = high_price - (0.618 * (high_price - low_price))
 
-        # 상단 요약 정보
+        # 2. 상단 요약 정보
         c1, c2, c3 = st.columns(3)
         c1.metric("현재 주가", f"${current_price:.2f}")
-        c2.metric("최근 1년 고점", f"${high_price:.2f}")
-        c3.metric("하락률", f"{((current_price/high_price)-1)*100:.2f}%")
+        c2.metric("60일 이평선", f"${data['MA60'].iloc[-1]:.2f}")
+        c3.metric("120일 이평선", f"${data['MA120'].iloc[-1]:.2f}")
 
-        # --- 그래프 그리기 시작 ---
-        try:
-            # 주가(80%)와 거래량(20%) 화면 분할
-            fig = make_subplots(rows=2, cols=1, shared_xaxes=True, 
-                               vertical_spacing=0.05, row_heights=[0.7, 0.3])
+        # 3. 차트 생성
+        fig = make_subplots(rows=2, cols=1, shared_xaxes=True, 
+                           vertical_spacing=0.03, row_heights=[0.75, 0.25])
 
-            # 1. 캔들차트
-            fig.add_trace(go.Candlestick(
-                x=data.index, open=data['Open'], high=data['High'],
-                low=data['Low'], close=data['Close'], name="주가"
-            ), row=1, col=1)
+        # 캔들차트
+        fig.add_trace(go.Candlestick(
+            x=data.index, open=data['Open'], high=data['High'],
+            low=data['Low'], close=data['Close'], name="주가"
+        ), row=1, col=1)
 
-            # 2. 거래량 (에러를 방지하기 위해 단순화)
-            fig.add_trace(go.Bar(
-                x=data.index, y=data['Volume'], name="거래량", marker_color='gray'
-            ), row=2, col=1)
+        # ★ 60일/120일 이평선 복구 ★
+        fig.add_trace(go.Scatter(x=data.index, y=data['MA60'], name="60일선", line=dict(color='royalblue', width=2)), row=1, col=1)
+        fig.add_trace(go.Scatter(x=data.index, y=data['MA120'], name="120일선", line=dict(color='orange', width=2)), row=1, col=1)
 
-            # 3. 피보나치 지지선 (가로선)
-            fig.add_hline(y=minus_2, line_dash="dot", line_color="yellow", annotation_text="-2%", row=1, col=1)
-            fig.add_hline(y=fibo_05, line_dash="dash", line_color="red", annotation_text="0.5", row=1, col=1)
-            fig.add_hline(y=fibo_0618, line_dash="dashdot", line_color="magenta", annotation_text="0.618", row=1, col=1)
+        # 거래량
+        fig.add_trace(go.Bar(x=data.index, y=data['Volume'], name="거래량", marker_color='gray', opacity=0.5), row=2, col=1)
 
-            # 레이아웃 설정
-            fig.update_layout(
-                height=600,
-                template="plotly_dark",
-                xaxis_rangeslider_visible=False,
-                margin=dict(l=10, r=10, t=30, b=10)
-            )
-            
-            # 차트 출력
-            st.plotly_chart(fig, use_container_width=True)
-            
-        except Exception as e:
-            st.error(f"그래프를 그리는 중 오류가 발생했습니다: {e}")
+        # ★ 피보나치 지지선 및 수치 표시 ★
+        # 선만 긋는 게 아니라 수치(Text)를 차트 오른쪽에 표시합니다.
+        fig.add_hline(y=minus_2, line_dash="dot", line_color="yellow", row=1, col=1,
+                      annotation_text=f"-2% (${minus_2:.2f})", annotation_position="top right")
+        fig.add_hline(y=fibo_05, line_dash="dash", line_color="red", row=1, col=1,
+                      annotation_text=f"Fibo 0.5 (${fibo_05:.2f})", annotation_position="top right")
+        fig.add_hline(y=fibo_0618, line_dash="dashdot", line_color="magenta", row=1, col=1,
+                      annotation_text=f"Fibo 0.618 (${fibo_0618:.2f})", annotation_position="top right")
 
-        # 대응 가이드
-        st.subheader("💡 전략적 대응 가이드")
-        if current_price <= fibo_0618:
-            st.error(f"🚩 강력 지지선(${fibo_0618:.2f}) 부근입니다.")
-        elif current_price <= fibo_05:
-            st.warning(f"⚠️ 중기 지지선(${fibo_05:.2f}) 부근입니다.")
-        else:
-            st.success("✅ 안정적인 전황 유지 중")
-            
+        # 레이아웃 정리
+        fig.update_layout(
+            height=700,
+            template="plotly_dark",
+            xaxis_rangeslider_visible=False,
+            margin=dict(l=10, r=10, t=30, b=10),
+            showlegend=True
+        )
+        
+        st.plotly_chart(fig, use_container_width=True)
+
+        # 4. 하단 전략 요약
+        st.subheader("📊 전황 지표 요약")
+        st.write(f"현재가는 고점($ {high_price:.2f}) 대비 주요 지지선들 사이에 위치해 있습니다.")
+        st.write(f"📍 **추가매수 검토가:** Fibo 0.5 (**${fibo_05:.2f}**) / Fibo 0.618 (**${fibo_0618:.2f}**)")
+
     else:
-        st.error("데이터를 찾을 수 없습니다. 종목 코드를 확인해 주세요.")
+        st.error("데이터를 찾을 수 없습니다.")
