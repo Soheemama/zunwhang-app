@@ -1,7 +1,7 @@
 import streamlit as st
 import yfinance as yf
 import plotly.graph_objects as go
-import pandas as pd
+import time
 
 # 1. 페이지 설정 및 숫자 가독성 최적화
 st.set_page_config(page_title="소희마마 전용 전황 분석", layout="wide")
@@ -9,7 +9,7 @@ st.markdown("<style>[data-testid='stMetricValue'] { font-size: 1.5rem !important
 
 st.title("🛡️ 한/미 통합 전황 및 의사결정 지원 시스템")
 
-# 2. ★ 마마님의 비밀 지도 ★
+# 2. ★ 마마님의 비밀 지도 (티커 3중 방어막 가동) ★
 portfolio_map = {
     "그리드 (GRID)": {"ticker": "GRID", "price": 156.05, "cur": "$"},
     "우라늄 (URA)": {"ticker": "URA", "price": 51.93, "cur": "$"},
@@ -27,42 +27,35 @@ portfolio_map = {
     "조선 TOP3 (SOL)": {"ticker": "466920", "price": 38282.0, "cur": "₩"}
 }
 
-# 3. 사이드바: 종목 선택
 selected_name = st.sidebar.selectbox("감시 종목 선택", list(portfolio_map.keys()))
 info = portfolio_map[selected_name]
 base_ticker = info['ticker']
 currency = info['cur']
 avg_price = st.sidebar.number_input(f"나의 평단가 ({currency})", value=float(info['price']))
 
-# ★ 강제 데이터 수색 시스템 ★
+# ★ 3단계 강제 소환 시스템 ★
 @st.cache_data(ttl=300)
-def load_data_robust(ticker):
-    # 한국 종목일 경우 3가지 패턴으로 모두 찔러봅니다.
-    if ticker[0].isdigit():
+def load_data_force(ticker):
+    if ticker[0].isdigit(): # 한국 종목
+        # .KS -> .KQ -> 번호만 순으로 기필코 찾아냅니다.
         for suffix in [".KS", ".KQ", ""]:
-            test_symbol = ticker + suffix
             try:
-                df = yf.download(test_symbol, period="1y", interval="1d", progress=False)
-                if not df.empty and len(df) > 5:
-                    return df, test_symbol
-            except:
-                continue
-    else:
-        # 미국 종목
+                df = yf.download(ticker + suffix, period="1y", interval="1d", progress=False, timeout=10)
+                if not df.empty and len(df) > 10: return df, ticker + suffix
+            except: continue
+    else: # 미국 종목
         try:
-            df = yf.download(ticker, period="1y", interval="1d", progress=False)
+            df = yf.download(ticker, period="1y", interval="1d", progress=False, timeout=10)
             if not df.empty: return df, ticker
-        except:
-            pass
+        except: pass
     return None, ticker
 
-data, final_symbol = load_data_robust(base_ticker)
+data, final_symbol = load_data_force(base_ticker)
 
 if data is not None and not data.empty:
-    # 데이터 가공
+    # 지표 계산
     data['MA60'] = data['Close'].rolling(window=60).mean()
-    high = float(data['High'].max())
-    curr_p = float(data['Close'].iloc[-1])
+    high, curr_p = float(data['High'].max()), float(data['Close'].iloc[-1])
     diff = high - float(data['Low'].min())
     loss_rate = ((curr_p / avg_price) - 1) * 100 if avg_price > 0 else 0
 
@@ -87,8 +80,8 @@ if data is not None and not data.empty:
         else: st.info(f"📍 [관망] 고점 대비 안정권 (심볼: {final_symbol})")
     
     with col2:
-        status = "✅ [보유] 진지 견고" if loss_rate > -10 else "🆘 [위험] 비중 조절 검토"
-        st.write(f"**상태:** {status} | **60일선:** {currency}{data['MA60'].iloc[-1]:{fmt}}")
+        st.write(f"**상태:** {'✅ [보유] 진지 견고' if loss_rate > -10 else '🆘 [위험] 비중 조절 검토'}")
+        st.write(f"**참고(60일선):** {currency}{data['MA60'].iloc[-1]:{fmt}}")
 
     fig = go.Figure()
     fig.add_trace(go.Candlestick(x=data.index, open=data['Open'], high=data['High'], low=data['Low'], close=data['Close'], name="주가"))
@@ -101,4 +94,4 @@ if data is not None and not data.empty:
     fig.update_layout(height=600, template="plotly_dark", xaxis_rangeslider_visible=False)
     st.plotly_chart(fig, use_container_width=True)
 else:
-    st.error(f"⚠️ 야후 서버가 {selected_name}({base_ticker})의 응답을 거부하고 있습니다. 잠시 후 새로고침해 주세요.")
+    st.error(f"⚠️ 야후 서버가 {selected_name}의 응답을 일시 거부했습니다. [새로고침(F5)]이 필요합니다.")
