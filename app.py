@@ -23,13 +23,13 @@ my_portfolio = {
     "GOOGL": {"name": "구글 (GOOGL)", "price": 341.9194, "cur": "$"},
     "RKLB": {"name": "로켓랩 (RKLB)", "price": 78.5850, "cur": "$"},
     "QBTS": {"name": "디웨이브 퀀텀 (QBTS)", "price": 28.68, "cur": "$"},
-    "445380": {"name": "HANARO K-반도체", "price": 20232, "cur": "₩"},
-    "475370": {"name": "SOL AI반도체소부장", "price": 19330, "cur": "₩"},
-    "465540": {"name": "SOL 전고체배터리", "price": 16968, "cur": "₩"},
-    "475380": {"name": "TIGER 코리아휴머노이드", "price": 13026, "cur": "₩"},
-    "415480": {"name": "TIGER 현대차그룹플러스", "price": 55794, "cur": "₩"},
-    "159400": {"name": "KODEX 코스닥150", "price": 19540, "cur": "₩"},
-    "466920": {"name": "SOL 조선 TOP3플러스", "price": 38282, "cur": "₩"}
+    "445380": {"name": "HANARO K-반도체", "price": 20232.0, "cur": "₩"},
+    "475370": {"name": "SOL AI반도체소부장", "price": 19330.0, "cur": "₩"},
+    "465540": {"name": "SOL 전고체배터리", "price": 16968.0, "cur": "₩"},
+    "475380": {"name": "TIGER 코리아휴머노이드", "price": 13026.0, "cur": "₩"},
+    "415480": {"name": "TIGER 현대차그룹플러스", "price": 55794.0, "cur": "₩"},
+    "159400": {"name": "KODEX 코스닥150", "price": 19540.0, "cur": "₩"},
+    "466920": {"name": "SOL 조선 TOP3플러스", "price": 38282.0, "cur": "₩"}
 }
 
 # 3. 사이드바: 종목 선택 리스트
@@ -75,7 +75,7 @@ if symbol:
 
         st.divider()
 
-        # 5. 전략 지시서 (문자열 미종결 오류 완벽 수정)
+        # 5. 전략 지시서
         st.subheader(f"🚩 {selected_name} 전황 보고")
         f05, f0618 = high - (0.5 * diff), high - (0.618 * diff)
         
@@ -90,7 +90,7 @@ if symbol:
                 if loss_rate > -10: st.success("✅ [보유] 진지가 견고합니다.")
                 else: st.error("🆘 [위험] 비중 축소 및 후방 배치를 검토하세요.")
 
-        # 6. 차트 생성 (피보나치 5중 전선 및 이평선)
+        # 6. 차트 생성
         fig = go.Figure()
         fig.add_trace(go.Candlestick(x=data.index, open=data['Open'], high=data['High'], low=data['Low'], close=data['Close'], name="주가"))
         fig.add_trace(go.Scatter(x=data.index, y=data['MA60'], name="60일선", line=dict(color='royalblue', width=1.5)))
