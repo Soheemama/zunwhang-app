@@ -12,65 +12,74 @@ if symbol:
     data = yf.download(symbol, period="1y")
     
     if not data.empty:
-        # 1. 지표 계산 (이평선 & 피보나치)
+        # 1. 지표 계산
         data['MA60'] = data['Close'].rolling(window=60).mean()
         data['MA120'] = data['Close'].rolling(window=120).mean()
         
         high_price = float(data['High'].max())
         low_price = float(data['Low'].min())
         current_price = float(data['Close'].iloc[-1])
+        diff = high_price - low_price
         
+        # 피보나치 5단계 전선
         minus_2 = high_price * 0.98
-        fibo_05 = high_price - (0.5 * (high_price - low_price))
-        fibo_0618 = high_price - (0.618 * (high_price - low_price))
+        fibo_0236 = high_price - (0.236 * diff)
+        fibo_0382 = high_price - (0.382 * diff)
+        fibo_05 = high_price - (0.5 * diff)
+        fibo_0618 = high_price - (0.618 * diff)
 
         # 2. 상단 요약 정보
-        c1, c2, c3 = st.columns(3)
+        c1, c2, c3, c4 = st.columns(4)
         c1.metric("현재 주가", f"${current_price:.2f}")
-        c2.metric("60일 이평선", f"${data['MA60'].iloc[-1]:.2f}")
-        c3.metric("120일 이평선", f"${data['MA120'].iloc[-1]:.2f}")
+        c2.metric("최근 고점", f"${high_price:.2f}")
+        c3.metric("60일선", f"${data['MA60'].iloc[-1]:.2f}")
+        c4.metric("120일선", f"${data['MA120'].iloc[-1]:.2f}")
 
-        # 3. 차트 생성
+        # 3. 차트 생성 (주가 7: 거래량 3 비율)
         fig = make_subplots(rows=2, cols=1, shared_xaxes=True, 
-                           vertical_spacing=0.03, row_heights=[0.75, 0.25])
+                           vertical_spacing=0.05, row_heights=[0.7, 0.3])
 
-        # 캔들차트
+        # 캔들차트 및 이평선 (1행)
         fig.add_trace(go.Candlestick(
             x=data.index, open=data['Open'], high=data['High'],
             low=data['Low'], close=data['Close'], name="주가"
         ), row=1, col=1)
+        
+        fig.add_trace(go.Scatter(x=data.index, y=data['MA60'], name="60일선", line=dict(color='royalblue', width=1.5)), row=1, col=1)
+        fig.add_trace(go.Scatter(x=data.index, y=data['MA120'], name="120일선", line=dict(color='orange', width=1.5)), row=1, col=1)
 
-        # ★ 60일/120일 이평선 복구 ★
-        fig.add_trace(go.Scatter(x=data.index, y=data['MA60'], name="60일선", line=dict(color='royalblue', width=2)), row=1, col=1)
-        fig.add_trace(go.Scatter(x=data.index, y=data['MA120'], name="120일선", line=dict(color='orange', width=2)), row=1, col=1)
+        # 거래량 복구 (2행)
+        # 종가에 따라 색상 구분 (상승 빨강, 하락 파랑)
+        colors = ['red' if c >= o else 'blue' for c, o in zip(data['Close'], data['Open'])]
+        fig.add_trace(go.Bar(x=data.index, y=data['Volume'], name="거래량", marker_color=colors, opacity=0.6), row=2, col=1)
 
-        # 거래량
-        fig.add_trace(go.Bar(x=data.index, y=data['Volume'], name="거래량", marker_color='gray', opacity=0.5), row=2, col=1)
+        # 피보나치 5개 전선 표시 (수치 포함)
+        lines = [
+            (minus_2, "yellow", "dot", f"-2% (${minus_2:.2f})"),
+            (fibo_0236, "green", "dash", f"0.236 (${fibo_0236:.2f})"),
+            (fibo_0382, "cyan", "dash", f"0.382 (${fibo_0382:.2f})"),
+            (fibo_05, "red", "dash", f"0.5 (${fibo_05:.2f})"),
+            (fibo_0618, "magenta", "dashdot", f"0.618 (${fibo_0618:.2f})")
+        ]
 
-        # ★ 피보나치 지지선 및 수치 표시 ★
-        # 선만 긋는 게 아니라 수치(Text)를 차트 오른쪽에 표시합니다.
-        fig.add_hline(y=minus_2, line_dash="dot", line_color="yellow", row=1, col=1,
-                      annotation_text=f"-2% (${minus_2:.2f})", annotation_position="top right")
-        fig.add_hline(y=fibo_05, line_dash="dash", line_color="red", row=1, col=1,
-                      annotation_text=f"Fibo 0.5 (${fibo_05:.2f})", annotation_position="top right")
-        fig.add_hline(y=fibo_0618, line_dash="dashdot", line_color="magenta", row=1, col=1,
-                      annotation_text=f"Fibo 0.618 (${fibo_0618:.2f})", annotation_position="top right")
+        for val, color, style, text in lines:
+            fig.add_hline(y=val, line_dash=style, line_color=color, row=1, col=1,
+                          annotation_text=text, annotation_position="top right")
 
         # 레이아웃 정리
         fig.update_layout(
-            height=700,
+            height=850,
             template="plotly_dark",
             xaxis_rangeslider_visible=False,
-            margin=dict(l=10, r=10, t=30, b=10),
-            showlegend=True
+            showlegend=True,
+            margin=dict(l=10, r=10, t=30, b=10)
         )
         
         st.plotly_chart(fig, use_container_width=True)
 
-        # 4. 하단 전략 요약
-        st.subheader("📊 전황 지표 요약")
-        st.write(f"현재가는 고점($ {high_price:.2f}) 대비 주요 지지선들 사이에 위치해 있습니다.")
-        st.write(f"📍 **추가매수 검토가:** Fibo 0.5 (**${fibo_05:.2f}**) / Fibo 0.618 (**${fibo_0618:.2f}**)")
-
+        # 4. 전략 가이드
+        st.subheader("📊 피보나치 전략 분석")
+        st.write(f"현재가는 고점 대비 **{((current_price/high_price)-1)*100:.2f}%** 지점에 있습니다.")
+        
     else:
         st.error("데이터를 찾을 수 없습니다.")
