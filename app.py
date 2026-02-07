@@ -6,7 +6,7 @@ import plotly.graph_objects as go
 st.set_page_config(page_title="소희마마 전용 전황 분석", layout="wide")
 st.title("🛡️ 주식 전황 및 의사결정 지원 시스템")
 
-# 1. ★ 마마님의 비밀 장부 (평단가 데이터) ★
+# 1. ★ 마마님의 비밀 장부 (평단가 데이터 명부) ★
 my_portfolio = {
     "GRID": 156.05, "URA": 51.93, "PL": 23.3, "ALAB": 179.8525,
     "GOOGL": 341.9194, "RKLB": 78.5850, "QBTS": 28.68,
@@ -23,7 +23,6 @@ if symbol:
     # 한국 종목/미국 종목 구분 처리
     search_symbol = f"{symbol}.KS" if symbol.isdigit() and len(symbol) == 6 else symbol
     
-    # 데이터 가져오기
     try:
         data = yf.download(search_symbol, period="1y")
         
@@ -31,13 +30,12 @@ if symbol:
             # 주요 수치 계산
             data['MA60'] = data['Close'].rolling(window=60).mean()
             data['MA120'] = data['Close'].rolling(window=120).mean()
-            high = float(data['High'].max())
-            low = float(data['Low'].min())
+            high, low = float(data['High'].max()), float(data['Low'].min())
             curr = float(data['Close'].iloc[-1])
             diff = high - low
             loss_rate = ((curr / avg_price) - 1) * 100 if avg_price > 0 else 0
 
-            # 상단 요약 지표
+            # 상단 요약 지표 (괄호 에러 완전 수정)
             c1, c2, c3, c4 = st.columns(4)
             c1.metric("현재가", f"{curr:,.2f}")
             c2.metric("평단가", f"{avg_price:,.2f}")
@@ -63,17 +61,11 @@ if symbol:
 
             # 4. ★ 그래프 복구 (Plotly 차트) ★
             fig = go.Figure()
-            
-            # 캔들차트
             fig.add_trace(go.Candlestick(
                 x=data.index, open=data['Open'], high=data['High'],
                 low=data['Low'], close=data['Close'], name="주가"
             ))
             
-            # 이평선 (60일, 120일)
+            # 이평선 추가
             fig.add_trace(go.Scatter(x=data.index, y=data['MA60'], name="60일선", line=dict(color='royalblue', width=1.5)))
-            fig.add_trace(go.Scatter(x=data.index, y=data['MA120'], name="120일선", line=dict(color='orange', width=1.5)))
-
-            # 피보나치 지지선 (0.5, 0.618)
-            fig.add_hline(y=f05, line_dash="dash", line_color="red", annotation_text=f"0.5 ({f05:,.2f})")
-            fig.add_hline(y=f0618, line_dash="dashdot", line_color="magenta", annotation
+            fig.add_trace
