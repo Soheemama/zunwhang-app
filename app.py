@@ -2,29 +2,30 @@ import streamlit as st
 import yfinance as yf
 import plotly.graph_objects as go
 import pandas as pd
+import requests
 
-# 1. 페이지 설정 및 숫자 가독성 최적화
+# 1. 페이지 설정 및 숫자 가독성 스타일
 st.set_page_config(page_title="소희마마 전용 전황 분석", layout="wide")
 st.markdown("<style>[data-testid='stMetricValue'] { font-size: 1.5rem !important; }</style>", unsafe_allow_html=True)
 
 st.title("🛡️ 한/미 통합 전황 및 의사결정 지원 시스템")
 
-# 2. ★ 마마님의 비밀 지도 (데이터 소환 경로 최적화) ★
+# 2. ★ 마마님의 비밀 지도 ★
 portfolio_map = {
-    "현대차그룹플러스 (TIGER)": {"y": "415480.KS", "price": 55794.0, "cur": "₩"},
-    "K-반도체 (HANARO)": {"y": "445380.KS", "price": 20232.0, "cur": "₩"},
-    "AI반도체소부장 (SOL)": {"y": "475370.KS", "price": 19330.0, "cur": "₩"},
-    "전고체배터리 (SOL)": {"y": "465540.KS", "price": 16968.0, "cur": "₩"},
-    "코리아휴머노이드 (TIGER)": {"y": "475380.KS", "price": 13026.0, "cur": "₩"},
-    "코스닥150 (KODEX)": {"y": "159400.KQ", "price": 19540.0, "cur": "₩"},
-    "조선 TOP3 (SOL)": {"y": "466920.KS", "price": 38282.0, "cur": "₩"},
-    "그리드 (GRID)": {"y": "GRID", "price": 156.05, "cur": "$"},
-    "우라늄 (URA)": {"y": "URA", "price": 51.93, "cur": "$"},
-    "팔란티어 (PL)": {"y": "PL", "price": 23.3, "cur": "$"},
-    "아스테라 랩스 (ALAB)": {"y": "ALAB", "price": 179.8525, "cur": "$"},
-    "구글 (GOOGL)": {"y": "GOOGL", "price": 341.9194, "cur": "$"},
-    "로켓랩 (RKLB)": {"y": "RKLB", "price": 78.5850, "cur": "$"},
-    "디웨이브 퀀텀 (QBTS)": {"y": "QBTS", "price": 28.68, "cur": "$"}
+    "현대차그룹플러스 (TIGER)": {"y": "415480.KS", "code": "415480", "price": 55794.0, "cur": "₩"},
+    "K-반도체 (HANARO)": {"y": "445380.KS", "code": "445380", "price": 20232.0, "cur": "₩"},
+    "AI반도체소부장 (SOL)": {"y": "475370.KS", "code": "475370", "price": 19330.0, "cur": "₩"},
+    "전고체배터리 (SOL)": {"y": "465540.KS", "code": "465540", "price": 16968.0, "cur": "₩"},
+    "코리아휴머노이드 (TIGER)": {"y": "475380.KS", "code": "475380", "price": 13026.0, "cur": "₩"},
+    "코스닥150 (KODEX)": {"y": "159400.KQ", "code": "159400", "price": 19540.0, "cur": "₩"},
+    "조선 TOP3 (SOL)": {"y": "466920.KS", "code": "466920", "price": 38282.0, "cur": "₩"},
+    "그리드 (GRID)": {"y": "GRID", "code": "GRID", "price": 156.05, "cur": "$"},
+    "우라늄 (URA)": {"y": "URA", "code": "URA", "price": 51.93, "cur": "$"},
+    "팔란티어 (PL)": {"y": "PL", "code": "PL", "price": 23.3, "cur": "$"},
+    "아스테라 랩스 (ALAB)": {"y": "ALAB", "code": "ALAB", "price": 179.8525, "cur": "$"},
+    "구글 (GOOGL)": {"y": "GOOGL", "code": "GOOGL", "price": 341.9194, "cur": "$"},
+    "로켓랩 (RKLB)": {"y": "RKLB", "code": "RKLB", "price": 78.5850, "cur": "$"},
+    "디웨이브 퀀텀 (QBTS)": {"y": "QBTS", "code": "QBTS", "price": 28.68, "cur": "$"}
 }
 
 selected_name = st.sidebar.selectbox("감시 종목 선택", list(portfolio_map.keys()))
@@ -32,26 +33,43 @@ info = portfolio_map[selected_name]
 currency = info['cur']
 avg_price = st.sidebar.number_input(f"나의 평단가 ({currency})", value=float(info['price']))
 
-# ★ 3중 공격적 데이터 소환 시스템 ★
-@st.cache_data(ttl=60) # 차단 방지를 위해 캐시 시간을 줄였습니다.
-def load_data_robust(y_ticker):
-    # 경로 1: 정규 야후 서버
-    df = yf.download(y_ticker, period="1y", interval="1d", progress=False)
-    if not df.empty and len(df) > 10: return df, "경로 A"
-    
-    # 경로 2: 대체 시장 규격 (.KS <-> .KQ 교차)
-    alt = y_ticker.replace(".KS", ".KQ") if ".KS" in y_ticker else y_ticker.replace(".KQ", ".KS")
-    df = yf.download(alt, period="1y", interval="1d", progress=False)
-    if not df.empty: return df, "경로 B"
-    
-    # 경로 3: 순수 번호 규격
-    clean = y_ticker.split(".")[0]
-    df = yf.download(clean, period="1y", interval="1d", progress=False)
-    if not df.empty: return df, "경로 C"
-    
+# ★ [긴급] 네이버 우회 보급로 (Naver Data Scraping) ★
+def get_naver_data(code):
+    try:
+        url = f"https://fchart.naver.com/sise.nhn?symbol={code}&timeframe=day&count=300&requestType=0"
+        r = requests.get(url)
+        # 네이버의 XML 데이터를 데이터프레임으로 변환하는 로직
+        data = []
+        for line in r.text.split('\n'):
+            if 'item data' in line:
+                row = line.split('"')[1].split('|')
+                data.append([row[0], float(row[1]), float(row[2]), float(row[3]), float(row[4]), int(row[5])])
+        df = pd.DataFrame(data, columns=['Date', 'Open', 'High', 'Low', 'Close', 'Volume'])
+        df['Date'] = pd.to_datetime(df['Date'])
+        df.set_index('Date', inplace=True)
+        return df
+    except:
+        return None
+
+# ★ 데이터 통합 소환 시스템 ★
+@st.cache_data(ttl=60)
+def load_data_complete(item):
+    # 1. 미국 주식은 야후 시도
+    if item['cur'] == "$":
+        df = yf.download(item['y'], period="1y", progress=False)
+        if not df.empty: return df, "야후(USA)"
+    else:
+        # 2. 한국 주식은 네이버부터 우선 시도 (가장 확실한 보급로)
+        df = get_naver_data(item['code'])
+        if df is not None and not df.empty: return df, "네이버(KOREA)"
+        
+        # 3. 네이버 실패 시 야후 교차 시도
+        df = yf.download(item['y'], period="1y", progress=False)
+        if not df.empty: return df, "야후(KOREA)"
+        
     return None, None
 
-data, source = load_data_robust(info['y'])
+data, source = load_data_complete(info)
 
 if data is not None and not data.empty:
     data['MA60'] = data['Close'].rolling(window=60).mean()
@@ -69,8 +87,8 @@ if data is not None and not data.empty:
 
     st.divider()
 
-    # 5. 전략 지시서
-    st.subheader(f"🚩 {selected_name} 전황 분석 (보급로: {source})")
+    # 5. 전략 분석
+    st.subheader(f"🚩 {selected_name} 전황 분석 (출처: {source})")
     f05, f0618 = high - (0.5 * diff), high - (0.618 * diff)
     
     col1, col2 = st.columns(2)
@@ -95,4 +113,4 @@ if data is not None and not data.empty:
     fig.update_layout(height=600, template="plotly_dark", xaxis_rangeslider_visible=False)
     st.plotly_chart(fig, use_container_width=True)
 else:
-    st.error(f"⚠️ 야후 서버의 일시적 거부입니다. 1분만 기다렸다가 새로고침(F5) 해주세요.")
+    st.error(f"⚠️ 현재 모든 전선(야후/네이버)의 데이터가 차단되었습니다. 잠시 후 새로고침(F5) 해주세요.")
