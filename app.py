@@ -6,14 +6,14 @@ import plotly.graph_objects as go
 st.set_page_config(page_title="소희마마 전용 전황 분석", layout="wide")
 st.markdown("""
     <style>
-    /* 숫자 크기를 최적화하여 큰 금액도 잘리지 않게 합니다 */
+    /* 한국 주식의 큰 숫자가 잘리지 않도록 폰트 크기를 최적화합니다 */
     [data-testid="stMetricValue"] { font-size: 1.5rem !important; }
     </style>
     """, unsafe_allow_html=True)
 
 st.title("🛡️ 한/미 통합 전황 및 의사결정 지원 시스템")
 
-# 2. ★ 마마님의 비밀 장부 ★
+# 2. ★ 마마님의 비밀 장부 (평단가 데이터 명부) ★
 my_portfolio = {
     "GRID": {"name": "GRID ETF (그리드)", "price": 156.05, "cur": "$"},
     "URA": {"name": "URA ETF (우라늄)", "price": 51.93, "cur": "$"},
@@ -35,15 +35,23 @@ my_portfolio = {
 stock_names = [info['name'] for info in my_portfolio.values()]
 selected_name = st.sidebar.selectbox("감시 종목 선택", stock_names)
 
-symbol = next((s for s, info in my_portfolio.items() if info['name'] == selected_name), "")
-currency = my_portfolio[symbol]['cur']
+# 정보 추출 및 에러 방지 로직
+symbol = ""
+for s, info in my_portfolio.items():
+    if info['name'] == selected_name:
+        symbol = s
+        currency = info['cur']
+        break
+
 default_price = my_portfolio[symbol]['price']
 avg_price = st.sidebar.number_input(f"[{symbol}] 나의 평단가 ({currency})", value=float(default_price))
 
 if symbol:
+    # ★ 한국 주식 데이터 로드 보강 (image_2c0381 해결) ★
     search_symbol = f"{symbol}.KS" if symbol.isdigit() and len(symbol) == 6 else symbol
     data = yf.download(search_symbol, period="1y")
     
+    # 코스피(.KS)에서 실패 시 코스닥(.KQ)으로 재시도
     if data.empty and symbol.isdigit():
         data = yf.download(f"{symbol}.KQ", period="1y")
 
@@ -55,7 +63,7 @@ if symbol:
         diff = high - float(data['Low'].min())
         loss_rate = ((curr_p / avg_price) - 1) * 100 if avg_price > 0 else 0
 
-        # 4. 상단 요약 (최고가 복구!)
+        # 4. 상단 요약 (image_2bf4dc 숫자 잘림 방지 포맷 적용)
         c1, c2, c3, c4 = st.columns(4)
         fmt = ",.0f" if currency == "₩" else ",.2f"
         c1.metric("현재가", f"{currency}{curr_p:{fmt}}")
@@ -95,4 +103,4 @@ if symbol:
         fig.update_layout(height=600, template="plotly_dark", xaxis_rangeslider_visible=False)
         st.plotly_chart(fig, use_container_width=True)
     else:
-        st.error(f"데이터 로드 실패.")
+        st.error(f"데이터 로드 실패. '{symbol}' 코드를 확인해 주세요.")
