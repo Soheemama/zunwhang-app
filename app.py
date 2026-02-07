@@ -6,7 +6,7 @@ import plotly.graph_objects as go
 st.set_page_config(page_title="소희마마 전용 전황 분석", layout="wide")
 st.markdown("""
     <style>
-    /* 숫자 크기를 살짝 줄여서 잘림 현상을 방지합니다 */
+    /* 숫자 크기를 최적화하여 원화 단위가 잘리지 않게 합니다 */
     [data-testid="stMetricValue"] { font-size: 1.6rem !important; }
     </style>
     """, unsafe_allow_html=True)
@@ -35,7 +35,7 @@ my_portfolio = {
 stock_names = [info['name'] for info in my_portfolio.values()]
 selected_name = st.sidebar.selectbox("감시 종목 선택", stock_names)
 
-# 선택한 종목의 정보 추출
+# 선택한 종목의 정보 추출 (image_2bf83c 에러 지점 수정 완료)
 symbol = ""
 for s, info in my_portfolio.items():
     if info['name'] == selected_name:
@@ -45,3 +45,60 @@ for s, info in my_portfolio.items():
 
 default_price = my_portfolio[symbol]['price']
 avg_price = st.sidebar.number_input(f"[{symbol}] 나의 평단가 ({currency})", value=float(default_price))
+
+if symbol:
+    search_symbol = f"{symbol}.KS" if symbol.isdigit() and len(symbol) == 6 else symbol
+    data = yf.download(search_symbol, period="1y")
+    
+    if data.empty and symbol.isdigit():
+        data = yf.download(f"{symbol}.KQ", period="1y")
+
+    if not data.empty:
+        # 데이터 계산
+        data['MA60'] = data['Close'].rolling(window=60).mean()
+        data['MA120'] = data['Close'].rolling(window=120).mean()
+        high, low = float(data['High'].max()), float(data['Low'].min())
+        curr_p = float(data['Close'].iloc[-1])
+        diff = high - low
+        loss_rate = ((curr_p / avg_price) - 1) * 100 if avg_price > 0 else 0
+
+        # 4. 상단 요약 (숫자 잘림 방지 포맷 적용)
+        c1, c2, c3, c4 = st.columns(4)
+        fmt = ",.0f" if currency == "₩" else ",.2f"
+        c1.metric("현재가", f"{currency}{curr_p:{fmt}}")
+        c2.metric("나의 평단가", f"{currency}{avg_price:{fmt}}")
+        c3.metric("수익률", f"{loss_rate:.2f}%")
+        c4.metric("60일선", f"{currency}{data['MA60'].iloc[-1]:{fmt}}")
+
+        st.divider()
+
+        # 5. 전략 지시서 및 차트 (에러 지점들 전수 수정)
+        st.subheader(f"🚩 {selected_name} 전황 보고")
+        f05, f0618 = high - (0.5 * diff), high - (0.618 * diff)
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            if curr_p <= f0618: st.error(f"📍 [추매] 지지선({f0618:{fmt}}) 도달!")
+            elif curr_p <= f05: st.warning(f"📍 [대기] 중기 지지선({f05:{fmt}}) 부근!")
+            else: st.info("📍 [관망] 전황 안정적")
+        
+        with col2:
+            if avg_price > 0:
+                if loss_rate > -10: st.success("✅ [보유] 진지 견고")
+                else: st.error("🆘 [위험] 비중 축소 검토")
+
+        # 6. 차트 생성
+        fig = go.Figure()
+        fig.add_trace(go.Candlestick(x=data.index, open=data['Open'], high=data['High'], low=data['Low'], close=data['Close'], name="주가"))
+        fig.add_trace(go.Scatter(x=data.index, y=data['MA60'], name="60일선", line=dict(color='royalblue', width=1.5)))
+        fig.add_trace(go.Scatter(x=data.index, y=data['MA120'], name="120일선", line=dict(color='orange', width=1.5)))
+
+        # 피보나치 5중 전선 복구
+        m2 = high * 0.98
+        fig.add_hline(y=m2, line_dash="dot", line_color="yellow", annotation_text=f"-2% ({m2:{fmt}})")
+        for lvl, clr in [(0.236, "green"), (0.382, "cyan"), (0.5, "red"), (0.618, "magenta")]:
+            val = high - (lvl * diff)
+            fig.add_hline(y=val, line_dash="dash", line_color=clr, annotation_text=f"Fibo {lvl} ({val:{fmt}})")
+
+        fig.update_layout(height=700, template="plotly_dark", xaxis_rangeslider_visible=False)
+        st.plotly_chart(fig, use_container_width=True)
