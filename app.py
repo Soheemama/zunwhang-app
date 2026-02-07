@@ -20,10 +20,7 @@ default_price = my_portfolio.get(symbol, 0.0)
 avg_price = st.sidebar.number_input(f"{symbol} 나의 평단가", value=float(default_price))
 
 if symbol:
-    # 한국 종목/미국 종목 구분 처리
     search_symbol = f"{symbol}.KS" if symbol.isdigit() and len(symbol) == 6 else symbol
-    
-    # 데이터 가져오기
     data = yf.download(search_symbol, period="1y")
     
     if not data.empty:
@@ -36,7 +33,7 @@ if symbol:
         diff = high - low
         loss_rate = ((curr / avg_price) - 1) * 100 if avg_price > 0 else 0
 
-        # 상단 요약 지표 (괄호 및 구문 에러 완전 수정)
+        # 상단 요약 지표
         c1, c2, c3, c4 = st.columns(4)
         c1.metric("현재가", f"{curr:,.2f}")
         c2.metric("평단가", f"{avg_price:,.2f}")
@@ -60,32 +57,27 @@ if symbol:
                 if loss_rate > -10: st.success("✅ [보유] 진지가 견고합니다.")
                 else: st.error("🆘 [위험] 손절 혹은 비중 축소 검토!")
 
-        # 4. ★ 그래프 복구 (Plotly 차트) ★
+        # 4. 그래프 (이평선 + 피보나치 5중 전선)
         fig = go.Figure()
+        fig.add_trace(go.Candlestick(x=data.index, open=data['Open'], high=data['High'], low=data['Low'], close=data['Close'], name="주가"))
         
-        # 캔들차트
-        fig.add_trace(go.Candlestick(
-            x=data.index, open=data['Open'], high=data['High'],
-            low=data['Low'], close=data['Close'], name="주가"
-        ))
-        
-        # 이평선 추가
+        # 이평선
         fig.add_trace(go.Scatter(x=data.index, y=data['MA60'], name="60일선", line=dict(color='royalblue', width=1.5)))
         fig.add_trace(go.Scatter(x=data.index, y=data['MA120'], name="120일선", line=dict(color='orange', width=1.5)))
 
-        # 피보나치 지지선 (0.5, 0.618)
-        fig.add_hline(y=f05, line_dash="dash", line_color="red", annotation_text=f"0.5 ({f05:,.2f})")
-        fig.add_hline(y=f0618, line_dash="dashdot", line_color="magenta", annotation_text=f"0.618 ({f0618:,.2f})")
-
-        # 레이아웃 설정 (Rangeslider 제거로 깔끔하게)
-        fig.update_layout(
-            height=600, 
-            template="plotly_dark", 
-            xaxis_rangeslider_visible=False, 
-            margin=dict(l=10, r=10, t=10, b=10)
-        )
+        # 피보나치 5단계 선 표시
+        # -2% 선
+        m2 = high * 0.98
+        fig.add_hline(y=m2, line_dash="dot", line_color="yellow", annotation_text=f"-2% ({m2:,.2f})")
         
+        # 주요 피보나치 레벨들
+        f_levels = [(0.236, "green"), (0.382, "cyan"), (0.5, "red"), (0.618, "magenta")]
+        for lvl, clr in f_levels:
+            val = high - (lvl * diff)
+            fig.add_hline(y=val, line_dash="dash", line_color=clr, annotation_text=f"Fibo {lvl} ({val:,.2f})")
+
+        fig.update_layout(height=700, template="plotly_dark", xaxis_rangeslider_visible=False, margin=dict(l=10, r=10, t=10, b=10))
         st.plotly_chart(fig, use_container_width=True)
 
     else:
-        st.error("데이터를 불러올 수 없습니다. 종목 코드(티커)를 확인해 주세요.")
+        st.error("데이터 로드 실패")
