@@ -13,7 +13,8 @@ st.markdown("""
 
 st.title("🛡️ 한/미 통합 전황 및 의사결정 지원 시스템")
 
-# 2. ★ 마마님의 비밀 장부 (평단가 데이터 명부) ★
+# 2. ★ 마마님의 비밀 장부 ★
+# 한국 종목은 아예 데이터가 잘 나오는 .KS를 붙여서 저장했습니다.
 my_portfolio = {
     "GRID": {"name": "GRID ETF (그리드)", "price": 156.05, "cur": "$"},
     "URA": {"name": "URA ETF (우라늄)", "price": 51.93, "cur": "$"},
@@ -22,20 +23,20 @@ my_portfolio = {
     "GOOGL": {"name": "구글 (GOOGL)", "price": 341.9194, "cur": "$"},
     "RKLB": {"name": "로켓랩 (RKLB)", "price": 78.5850, "cur": "$"},
     "QBTS": {"name": "디웨이브 퀀텀 (QBTS)", "price": 28.68, "cur": "$"},
-    "445380": {"name": "HANARO K-반도체", "price": 20232.0, "cur": "₩"},
-    "475370": {"name": "SOL AI반도체소부장", "price": 19330.0, "cur": "₩"},
-    "465540": {"name": "SOL 전고체배터리", "price": 16968.0, "cur": "₩"},
-    "475380": {"name": "TIGER 코리아휴머노이드", "price": 13026.0, "cur": "₩"},
-    "415480": {"name": "TIGER 현대차그룹플러스", "price": 55794.0, "cur": "₩"},
-    "159400": {"name": "KODEX 코스닥150", "price": 19540.0, "cur": "₩"},
-    "466920": {"name": "SOL 조선 TOP3플러스", "price": 38282.0, "cur": "₩"}
+    "445380.KS": {"name": "HANARO K-반도체", "price": 20232.0, "cur": "₩"},
+    "475370.KS": {"name": "SOL AI반도체소부장", "price": 19330.0, "cur": "₩"},
+    "465540.KS": {"name": "SOL 전고체배터리", "price": 16968.0, "cur": "₩"},
+    "475380.KS": {"name": "TIGER 코리아휴머노이드", "price": 13026.0, "cur": "₩"},
+    "415480.KS": {"name": "TIGER 현대차그룹플러스", "price": 55794.0, "cur": "₩"},
+    "159400.KS": {"name": "KODEX 코스닥150", "price": 19540.0, "cur": "₩"},
+    "466920.KS": {"name": "SOL 조선 TOP3플러스", "price": 38282.0, "cur": "₩"}
 }
 
 # 3. 사이드바: 종목 선택 리스트
 stock_names = [info['name'] for info in my_portfolio.values()]
 selected_name = st.sidebar.selectbox("감시 종목 선택", stock_names)
 
-# 정보 추출 및 에러 방지 로직
+# 선택 정보 추출
 symbol = ""
 for s, info in my_portfolio.items():
     if info['name'] == selected_name:
@@ -44,16 +45,16 @@ for s, info in my_portfolio.items():
         break
 
 default_price = my_portfolio[symbol]['price']
-avg_price = st.sidebar.number_input(f"[{symbol}] 나의 평단가 ({currency})", value=float(default_price))
+avg_price = st.sidebar.number_input(f"[{symbol.split('.')[0]}] 나의 평단가 ({currency})", value=float(default_price))
 
 if symbol:
-    # ★ 한국 주식 데이터 로드 보강 (image_2c0381 해결) ★
-    search_symbol = f"{symbol}.KS" if symbol.isdigit() and len(symbol) == 6 else symbol
-    data = yf.download(search_symbol, period="1y")
+    # 데이터 가져오기 (가장 확실한 방법 사용)
+    data = yf.download(symbol, period="1y")
     
-    # 코스피(.KS)에서 실패 시 코스닥(.KQ)으로 재시도
-    if data.empty and symbol.isdigit():
-        data = yf.download(f"{symbol}.KQ", period="1y")
+    # 만약 위에서 실패하면 .KQ로 한 번 더 자동 교차 검증
+    if data.empty and ".KS" in symbol:
+        alt_symbol = symbol.replace(".KS", ".KQ")
+        data = yf.download(alt_symbol, period="1y")
 
     if not data.empty:
         # 데이터 계산
@@ -63,7 +64,7 @@ if symbol:
         diff = high - float(data['Low'].min())
         loss_rate = ((curr_p / avg_price) - 1) * 100 if avg_price > 0 else 0
 
-        # 4. 상단 요약 (image_2bf4dc 숫자 잘림 방지 포맷 적용)
+        # 4. 상단 요약
         c1, c2, c3, c4 = st.columns(4)
         fmt = ",.0f" if currency == "₩" else ",.2f"
         c1.metric("현재가", f"{currency}{curr_p:{fmt}}")
